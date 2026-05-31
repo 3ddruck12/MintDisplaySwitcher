@@ -108,42 +108,35 @@ class MintDisplaySwitcherApplet extends Applet.IconApplet {
             Main.keybindingManager.removeXletHotKey(this, id);
             const binding = this[settingsKey];
             if (binding) {
-                // Verhindert, dass Cinnamons eingebauter Display-Umschalter
-                // (WM-Aktion "switch-monitor", standardmäßig <Super>p) unsere
-                // Tastenkürzel abfängt, bevor das Applet sie erhält.
-                this._releaseWmShortcutConflict(binding);
-                Main.keybindingManager.addXletHotKey(
+                const registered = Main.keybindingManager.addXletHotKey(
                     this, id, binding, () => this[handlerName]());
+                // If registration failed, the binding is likely taken by the system
+                // (e.g. switch-monitor). Warn once so the user can free it manually via
+                // System Settings → Keyboard → Shortcuts → Hardware → Toggle displays.
+                if (!registered)
+                    this._warnKeybindingConflict(binding);
             }
         }
     }
 
     /**
-     * Entfernt ein kollidierendes Tastenkürzel aus der WM-Aktion "switch-monitor",
-     * damit das Applet-Kürzel nicht vom Fenstermanager geschluckt wird.
-     * Der eingebaute Umschalter bleibt über verbleibende Kürzel (z. B. XF86Display) erreichbar.
-     * @param {string} binding — z. B. "<Super>p"
+     * Shows a one-time notification when a keybinding could not be registered
+     * because it conflicts with an existing system shortcut.
+     * The user should free it via System Settings → Keyboard → Shortcuts.
+     * @param {string} binding — e.g. "<Super>p"
      */
-    _releaseWmShortcutConflict(binding) {
-        try {
-            const schema = 'org.cinnamon.desktop.keybindings.wm';
-            const key = 'switch-monitor';
+    _warnKeybindingConflict(binding) {
+        const key = 'warnedBinding_' + binding.replace(/[^a-zA-Z0-9]/g, '_');
+        if (this[key])
+            return;
+        this[key] = true;
 
-            // Schema-Existenz prüfen, sonst still abbrechen
-            const source = Gio.SettingsSchemaSource.get_default();
-            if (!source || !source.lookup(schema, true))
-                return;
-
-            const wmSettings = new Gio.Settings({ schema_id: schema });
-            const current = wmSettings.get_strv(key);
-            if (!current || current.indexOf(binding) === -1)
-                return;
-
-            const filtered = current.filter(b => b !== binding);
-            wmSettings.set_strv(key, filtered);
-        } catch (e) {
-            global.logError('[MintDisplaySwitcher] WM-Shortcut-Konflikt konnte nicht aufgelöst werden: ' + e.message);
-        }
+        const label = binding.replace('<Super>', 'Super+').replace('<Shift>', 'Shift+')
+            .replace('<Control>', 'Ctrl+').replace('<Alt>', 'Alt+');
+        Main.notify(
+            _('Display Switcher'),
+            _('The shortcut %s is already used by the system. To use it here, go to System Settings → Keyboard → Shortcuts → Hardware → "Toggle displays" and remove %s there.').format(label, label)
+        );
     }
 
     _onKeyOpen() { this._openModeChooser(); }
