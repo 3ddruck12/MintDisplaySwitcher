@@ -1,0 +1,6 @@
+# Automatisch generierte Dateien ignorieren
+*.pyc
+__pycache__/
+.DS_Store
+*.swp
+*.swo
